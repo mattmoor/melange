@@ -30,6 +30,7 @@ import (
 	"chainguard.dev/melange/pkg/container"
 	"chainguard.dev/melange/pkg/container/dagger"
 	"chainguard.dev/melange/pkg/container/docker"
+	"chainguard.dev/melange/pkg/container/qemu"
 	"chainguard.dev/melange/pkg/linter"
 	"github.com/chainguard-dev/clog"
 	"github.com/spf13/cobra"
@@ -238,6 +239,8 @@ func getRunner(ctx context.Context, runner string) (container.Runner, error) {
 			return docker.NewRunner(ctx)
 		case "experimentaldagger":
 			return dagger.NewRunner(ctx)
+		case "qemu":
+			return qemu.NewRunner(ctx)
 		default:
 			return nil, fmt.Errorf("unknown runner: %s", runner)
 		}
@@ -250,7 +253,7 @@ func getRunner(ctx context.Context, runner string) (container.Runner, error) {
 		// darwin is the same as default, but we want to keep it explicit
 		fallthrough
 	default:
-		return docker.NewRunner(ctx)
+		return qemu.NewRunner(ctx)
 	}
 }
 

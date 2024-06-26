@@ -31,6 +31,7 @@ import (
 	"strings"
 	"time"
 
+	"chainguard.dev/apko/pkg/apk/auth"
 	apkofs "chainguard.dev/apko/pkg/apk/fs"
 	apko_build "chainguard.dev/apko/pkg/build"
 	apko_types "chainguard.dev/apko/pkg/build/types"
@@ -247,16 +248,41 @@ func (b *Build) BuildGuest(ctx context.Context, imgConfig apko_types.ImageConfig
 	}
 	defer os.RemoveAll(tmp)
 
-	bc, err := apko_build.New(ctx, guestFS,
+	authOpts := make([]apko_build.Option, 0, len(b.Auth))
+	for domain, creds := range b.Auth {
+		authOpts = append(authOpts, apko_build.WithAuthenticator(auth.StaticAuth(domain, creds.User, creds.Pass)))
+	}
+
+	extraPkgs := append([]string{
+		// TODO: These are needed by the QEMU runner
+		"mount",
+		"systemd-init",
+		"openssh-server",
+		"wolfi-base",
+	}, b.ExtraPackages...)
+
+	// TODO: This is needed by the QEMU runner
+	imgConfig.Paths = []apko_types.PathMutation{{
+		// Create the directory to mount the workspace
+		Type:        "directory",
+		Path:        "/home/build",
+		Permissions: 0o777,
+	}, {
+		// Symlink /dev/null as the logind service.
+		Type:   "symlink",
+		Source: "/dev/null",
+		Path:   "/etc/systemd/system/systemd-logind.service",
+	}}
+
+	bc, err := apko_build.New(ctx, guestFS, append(authOpts,
 		apko_build.WithImageConfiguration(imgConfig),
 		apko_build.WithArch(b.Arch),
 		apko_build.WithExtraKeys(b.ExtraKeys),
 		apko_build.WithExtraBuildRepos(b.ExtraRepos),
-		apko_build.WithExtraPackages(b.ExtraPackages),
+		apko_build.WithExtraPackages(extraPkgs),
 		apko_build.WithCacheDir(b.ApkCacheDir, false), // TODO: Replace with real offline plumbing
 		apko_build.WithTempDir(tmp),
-		apko_build.WithIgnoreSignatures(b.IgnoreSignatures))
-
+		apko_build.WithIgnoreSignatures(b.IgnoreSignatures))...)
 	if err != nil {
 		return "", fmt.Errorf("unable to create build context: %w", err)
 	}
